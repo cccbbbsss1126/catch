@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>두더지 잡기</title>
+<style>
+  :root {
+    --bg: #e8f5d8;
+    --text: #3b2a1a;
+    --panel: #ffffff;
+    --grass: #7bc74d;
+    --hole: #3a2412;
+    --hole-edge: #241508;
+    --mole: #8b5a2b;
+    --mole-dark: #5e3a18;
+    --accent: #e8542f;
+    --accent-hover: #c9421f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c2a14;
+      --text: #f3e9dc;
+      --panel: #2b3d20;
+      --grass: #4c8a2c;
+      --hole: #120a04;
+      --hole-edge: #000000;
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  h1 { margin: 0; font-size: clamp(24px, 5vw, 36px); }
+
+  .status {
+    display: flex;
+    gap: 16px;
+    font-size: clamp(20px, 4.5vw, 30px);
+    font-weight: bold;
+  }
+  .status div {
+    background: var(--panel);
+    padding: 6px 20px;
+    border-radius: 14px;
+    min-width: 120px;
+    text-align: center;
+  }
+
+  .board {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(8px, 2vw, 18px);
+    width: min(92vw, 62vh, 560px);
+    aspect-ratio: 1 / 1;
+    padding: clamp(8px, 2vw, 18px);
+    background: var(--grass);
+    border-radius: 24px;
+  }
+
+  .hole {
+    position: relative;
+    overflow: hidden;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 60%, var(--hole) 55%, var(--hole-edge) 100%);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .mole {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 84%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, #b07a45, var(--mole) 70%, var(--mole-dark));
+    border: 4px solid var(--mole-dark);
+    transform: translate(-50%, 110%);
+    transition: transform 0.12s ease-out;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    pointer-events: none;
+  }
+  .hole.up .mole { transform: translate(-50%, 8%); }
+  .hole.hit .mole {
+    background: radial-gradient(circle at 50% 35%, #ffd27a, #e0a030 70%, #a8741a);
+  }
+
+  .face { font-size: clamp(22px, 6vw, 44px); line-height: 1; color: #1a0f05; letter-spacing: 0.1em; }
+  .nose {
+    width: 22%;
+    height: 12%;
+    background: #f4a0a8;
+    border-radius: 50%;
+    margin-top: 6%;
+    border: 2px solid var(--mole-dark);
+  }
+  .label { font-size: clamp(12px, 3vw, 20px); color: #fff3e0; margin-top: 4%; }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(30, 20, 10, 0.82);
+    border-radius: 24px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #fff;
+    text-align: center;
+    z-index: 5;
+  }
+  .overlay.show { display: flex; }
+  .overlay .title { font-size: clamp(20px, 5vw, 30px); }
+  .overlay .final { font-size: clamp(72px, 22vw, 150px); font-weight: bold; line-height: 1; color: #ffd45e; }
+  .overlay .unit { font-size: clamp(20px, 5vw, 30px); }
+
+  button {
+    font: inherit;
+    font-size: clamp(20px, 4.5vw, 28px);
+    font-weight: bold;
+    padding: 14px 40px;
+    border: none;
+    border-radius: 16px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+  <h1>🔨 두더지 잡기</h1>
+
+  <div class="status">
+    <div>점수 <span id="score">0</span></div>
+    <div>시간 <span id="time">30</span></div>
+  </div>
+
+  <div class="board" id="board">
+    <div class="overlay" id="overlay">
+      <div class="title">게임 끝!</div>
+      <div class="final" id="finalScore">0</div>
+      <div class="unit">점</div>
+    </div>
+  </div>
+
+  <button id="restart">다시 시작</button>
+
+<script>
+(function () {
+  var GAME_SECONDS = 30;
+  var HOLE_COUNT = 9;
+
+  var board = document.getElementById("board");
+  var overlay = document.getElementById("overlay");
+  var scoreEl = document.getElementById("score");
+  var timeEl = document.getElementById("time");
+  var finalEl = document.getElementById("finalScore");
+  var restartBtn = document.getElementById("restart");
+
+  var holes = [];
+  var score = 0;
+  var timeLeft = GAME_SECONDS;
+  var current = -1;
+  var running = false;
+  var moleTimer = null;
+  var countTimer = null;
+
+  // 구멍 9개 만들기
+  for (var i = 0; i < HOLE_COUNT; i++) {
+    var hole = document.createElement("div");
+    hole.className = "hole";
+    hole.innerHTML =
+      '<div class="mole">' +
+        '<div class="face">● ●</div>' +
+        '<div class="nose"></div>' +
+        '<div class="label">두더지</div>' +
+      '</div>';
+    hole.dataset.index = i;
+    board.insertBefore(hole, overlay);
+    holes.push(hole);
+  }
+
+  function hideMole() {
+    if (current >= 0) {
+      holes[current].classList.remove("up", "hit");
+      current = -1;
+    }
+  }
+
+  function showMole() {
+    if (!running) return;
+    hideMole();
+
+    var next;
+    do {
+      next = Math.floor(Math.random() * HOLE_COUNT);
+    } while (next === current);
+
+    current = next;
+    holes[current].classList.add("up");
+
+    // 시간이 지날수록 조금씩 빨라짐
+    var elapsed = GAME_SECONDS - timeLeft;
+    var stay = Math.max(550, 950 - elapsed * 14);
+    moleTimer = setTimeout(showMole, stay);
+  }
+
+  function whack(index) {
+    if (!running || index !== current) return;
+    var h = holes[current];
+    if (h.classList.contains("hit")) return;
+
+    score++;
+    scoreEl.textContent = score;
+    h.classList.add("hit");
+
+    clearTimeout(moleTimer);
+    moleTimer = setTimeout(showMole, 140);
+  }
+
+  board.addEventListener("pointerdown", function (e) {
+    var h = e.target.closest(".hole");
+    if (!h) return;
+    e.preventDefault();
+    whack(Number(h.dataset.index));
+  });
+
+  function endGame() {
+    running = false;
+    clearTimeout(moleTimer);
+    clearInterval(countTimer);
+    hideMole();
+    finalEl.textContent = score;
+    overlay.classList.add("show");
+  }
+
+  function startGame() {
+    clearTimeout(moleTimer);
+    clearInterval(countTimer);
+    hideMole();
+
+    score = 0;
+    timeLeft = GAME_SECONDS;
+    scoreEl.textContent = score;
+    timeEl.textContent = timeLeft;
+    overlay.classList.remove("show");
+    running = true;
+
+    countTimer = setInterval(function () {
+      timeLeft--;
+      timeEl.textContent = timeLeft;
+      if (timeLeft <= 0) endGame();
+    }, 1000);
+
+    moleTimer = setTimeout(showMole, 400);
+  }
+
+  restartBtn.addEventListener("click", startGame);
+
+  startGame();
+})();
+</script>
+</body>
+</html>
